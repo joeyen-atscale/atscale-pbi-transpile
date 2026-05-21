@@ -1,0 +1,183 @@
+# Coverage registry — single source of truth for DAX function support.
+#
+# Status values:
+#   - supported          — full faithful translation; all known forms covered.
+#   - partial            — some forms translate, others refuse. List partial_reasons.
+#   - unsupported        — no lowering yet; on the roadmap.
+#   - refused-by-design  — cannot be faithfully translated to MDX. Document workaround.
+#
+# Every entry must point to its lowering module and at least one golden_tests ID.
+# CI fails if a DAX function appears in a test or corpus file but lacks an entry here.
+
+version: 0.0.1
+
+functions:
+  - function: CALCULATE
+    status: supported
+    arity: 2+
+    lowering: lower/calculate.py:CalculateLowering
+    golden_tests:
+      - g_calc_001
+      - g_calc_002
+      - g_calc_003
+    partial_reasons: []
+    notes: |
+      Pure dimension-override filters lower to MDX tuples.
+      Composite bodies or REMOVEFILTERS lower to synthesized WITH MEMBER.
+
+  - function: SUM
+    status: supported
+    arity: 1
+    lowering: lower/aggregations.py:SumLowering
+    golden_tests:
+      - g_sum_001
+    partial_reasons: []
+
+  - function: AVERAGE
+    status: supported
+    arity: 1
+    lowering: lower/aggregations.py:AverageLowering
+    golden_tests: [g_avg_001]
+    partial_reasons: []
+
+  - function: COUNT
+    status: supported
+    arity: 1
+    lowering: lower/aggregations.py:CountLowering
+    golden_tests: [g_count_001]
+    partial_reasons: []
+
+  - function: DISTINCTCOUNT
+    status: supported
+    arity: 1
+    lowering: lower/aggregations.py:DistinctCountLowering
+    golden_tests: [g_dcount_001]
+    partial_reasons: []
+
+  - function: SUMX
+    status: partial
+    arity: 2
+    lowering: lower/iterators.py:SumxLowering
+    golden_tests: [g_sumx_001, g_sumx_002]
+    partial_reasons:
+      - "Supported when first arg is VALUES(Dim[Attr]) or a dimension table."
+      - "Refused when first arg is a fact table or arbitrary FILTER(...) over rows."
+
+  - function: AVERAGEX
+    status: partial
+    arity: 2
+    lowering: lower/iterators.py:AveragexLowering
+    golden_tests: [g_avgx_001]
+    partial_reasons:
+      - "Same row-context constraint as SUMX."
+
+  - function: FILTER
+    status: partial
+    arity: 2
+    lowering: lower/iterators.py:FilterLowering
+    golden_tests: [g_filter_001]
+    partial_reasons:
+      - "Only when applied to a dimension table; refuses on fact-table predicates."
+
+  - function: ALL
+    status: supported
+    arity: 0+
+    lowering: lower/calculate.py:AllLowering
+    golden_tests: [g_all_001]
+    partial_reasons: []
+
+  - function: ALLEXCEPT
+    status: supported
+    arity: 1+
+    lowering: lower/calculate.py:AllExceptLowering
+    golden_tests: [g_allexcept_001]
+    partial_reasons: []
+
+  - function: RELATED
+    status: supported
+    arity: 1
+    lowering: lower/relationships.py:RelatedLowering
+    golden_tests: [g_related_001]
+    partial_reasons: []
+    notes: |
+      DAX RELATED navigates a relationship to a related column.
+      Maps to MDX CurrentMember.Properties or a tuple navigation.
+
+  - function: USERELATIONSHIP
+    status: partial
+    arity: 2
+    lowering: lower/relationships.py:UseRelationshipLowering
+    golden_tests: [g_userel_001]
+    partial_reasons:
+      - "v1.0 supports one inactive relationship per measure (the common case)."
+      - "Arbitrary multi-inactive-relationship graphs deferred to v1.1."
+
+  - function: IF
+    status: supported
+    arity: 3
+    lowering: lower/scalar.py:IfLowering
+    golden_tests: [g_if_001]
+    partial_reasons: []
+
+  - function: SWITCH
+    status: supported
+    arity: 3+
+    lowering: lower/scalar.py:SwitchLowering
+    golden_tests: [g_switch_001]
+    partial_reasons: []
+
+  - function: SAMEPERIODLASTYEAR
+    status: supported
+    arity: 1
+    lowering: lower/time_intelligence.py:SamePeriodLastYearLowering
+    golden_tests: [g_spy_001]
+    partial_reasons: []
+    notes: "Requires a marked Date table."
+
+  - function: TOTALYTD
+    status: supported
+    arity: 2+
+    lowering: lower/time_intelligence.py:TotalYtdLowering
+    golden_tests: [g_ytd_001]
+    partial_reasons: []
+    notes: "Requires a marked Date table."
+
+  - function: DATEADD
+    status: supported
+    arity: 3
+    lowering: lower/time_intelligence.py:DateAddLowering
+    golden_tests: [g_dateadd_001]
+    partial_reasons: []
+
+  - function: PARALLELPERIOD
+    status: supported
+    arity: 3
+    lowering: lower/time_intelligence.py:ParallelPeriodLowering
+    golden_tests: [g_parallel_001]
+    partial_reasons: []
+
+  - function: TOPN
+    status: supported
+    arity: 3+
+    lowering: lower/sets.py:TopNLowering
+    golden_tests: [g_topn_001]
+    partial_reasons: []
+
+  - function: RANKX
+    status: refused-by-design
+    arity: 2+
+    reason: "Row-context ranking over arbitrary tables has no clean MDX analog."
+    workaround: "Use AtScale-native MDX RANK() in a manually-authored calc member."
+
+  - function: EARLIER
+    status: refused-by-design
+    arity: 1
+    reason: "EARLIER references outer row context across nested iterators; MDX has no equivalent."
+    workaround: "Refactor to use VAR / RETURN at the DAX side before transpiling."
+
+  - function: VALUES
+    status: supported
+    arity: 1
+    lowering: lower/sets.py:ValuesLowering
+    golden_tests: [g_values_001]
+    partial_reasons: []
